@@ -361,6 +361,7 @@
     "adminPassword": "pokemon2026",
     "ordersEndpoint": "",
     "contactLine": "LINE：@your_line　IG：@your_ig",
+    "footerNote": "本站為個人代購服務，非 Pokémon 官方網站。商品圖片與名稱版權屬原公司所有。",
     "askFields": {
       "name": "訂購人姓名",
       "contact": "聯絡方式（LINE ID / IG 帳號）",
@@ -450,7 +451,7 @@
 <footer>
   <div class="wrap">
     <div id="footContact"></div>
-    <div style="margin-top:6px">本站為個人代購服務，非 Pokémon 官方網站。商品圖片與名稱版權屬原公司所有。</div>
+    <div style="margin-top:6px" id="footNote"></div>
   </div>
 </footer>
 
@@ -525,12 +526,14 @@
 
       <div class="panel" style="margin-top:14px">
         <h3>文字設定</h3>
-        <label class="f">網站名稱</label><input class="f-in" id="sName">
+        <label class="f">網站名稱（左上角大字）</label><input class="f-in" id="sName">
+        <label class="f">英文副標（左上角小字，留空則不顯示）</label><input class="f-in" id="sTagline">
         <label class="f">首頁標題</label><input class="f-in" id="sHeroTitle">
         <label class="f">首頁副標</label><input class="f-in" id="sHeroSub">
         <label class="f">公告（開團中顯示，可換行）</label><textarea class="f-in" id="sAnn"></textarea>
         <label class="f">暫停收單時顯示的訊息</label><textarea class="f-in" id="sClosed"></textarea>
         <label class="f">頁尾聯絡資訊</label><input class="f-in" id="sContact">
+        <label class="f">頁尾聲明（免責說明，留空則不顯示）</label><textarea class="f-in" id="sFootNote"></textarea>
         <label class="f">寄送方式選項（用逗號分隔）</label><input class="f-in" id="sShip">
       </div>
 
@@ -615,10 +618,15 @@
     var s = data.settings;
     document.title = s.shopName || "代購網站";
     $("#brandName").firstChild.nodeValue = s.shopName || "";
-    $("#brandTag").textContent = s.tagline || "";
+    var tagEl = $("#brandTag");
+    tagEl.textContent = s.tagline || "";
+    tagEl.style.display = s.tagline ? "block" : "none";
     $("#heroTitle").textContent = s.heroTitle || "";
     $("#heroSub").textContent = s.heroSub || "";
     $("#footContact").textContent = s.contactLine || "";
+    var fn = $("#footNote");
+    fn.textContent = s.footerNote || "";
+    fn.style.display = s.footerNote ? "block" : "none";
     var badge = $("#statusBadge");
     badge.className = "status " + (isOpen() ? "on" : "off");
     badge.textContent = isOpen() ? "開放收單中" : "暫停收單";
@@ -687,6 +695,21 @@
           + "</div>"
         + "</div></article>";
     }).join("");
+    imgFallback(g, "ph", "圖片無法載入");
+  }
+
+  /* 圖片載不出來時（例如圖床擋外連）改顯示提示，不要出現破圖 */
+  function imgFallback(root, phClass, text){
+    $$("img", root).forEach(function(im){
+      function fail(){
+        if(!im.parentNode) return;
+        var d = document.createElement("div");
+        d.className = phClass; d.textContent = text || "";
+        im.parentNode.replaceChild(d, im);
+      }
+      im.onerror = fail;
+      if(im.complete && im.naturalWidth === 0 && im.getAttribute("src")) fail();
+    });
   }
 
   /* ---------------- 購物車 ---------------- */
@@ -716,6 +739,7 @@
           + "<small>"+money(l.p.price)+" × "+l.q+"　＝ "+money(l.sum)+"</small><br>"
           + '<button class="rm" data-rm>移除</button></div></div>';
       }).join("");
+      imgFallback(b, "ph2", "");
       $("#toCheckout").disabled = !isOpen();
       $("#toCheckout").textContent = isOpen() ? "前往填寫訂購資料" : "目前暫停收單";
     }
@@ -821,9 +845,11 @@
   }
   function fillAdmin(){
     var s = data.settings;
-    $("#sName").value = s.shopName||""; $("#sHeroTitle").value = s.heroTitle||"";
+    $("#sName").value = s.shopName||""; $("#sTagline").value = s.tagline||"";
+    $("#sHeroTitle").value = s.heroTitle||"";
     $("#sHeroSub").value = s.heroSub||""; $("#sAnn").value = s.announcement||"";
     $("#sClosed").value = s.closedMessage||""; $("#sContact").value = s.contactLine||"";
+    $("#sFootNote").value = s.footerNote||"";
     $("#sShip").value = (s.shippingOptions||[]).join("、");
     $("#sEndpoint").value = s.ordersEndpoint||""; $("#sPw").value = s.adminPassword||"";
     $("#swOpen").className = "sw" + (s.open ? " on" : "");
@@ -852,12 +878,26 @@
           + '<button class="mini danger" data-act="del">刪</button>'
         + "</div></td></tr>";
     }).join("");
+    imgFallback(tb, "ph3", "");
+    checkImageHosts();
+  }
+  /* 提醒使用會擋外連的圖床（Imgur 會回 403，圖片會顯示不出來） */
+  function checkImageHosts(){
+    var bad = data.products.filter(function(p){
+      return /(^|\/\/|\.)imgur\.com(\/|$)/i.test(String(p.image||""));
+    });
+    if(bad.length){
+      admMsg("⚠️ 有 " + bad.length + " 項商品用的是 Imgur 圖片網址。Imgur 已封鎖外連到網站，"
+        + "圖片在前台會顯示不出來，請改用 postimages.org、ImgBB，或把圖片放進你的 GitHub repo。", false);
+    }
   }
   function collectAdmin(){
     var s = data.settings;
-    s.shopName = $("#sName").value.trim(); s.heroTitle = $("#sHeroTitle").value.trim();
+    s.shopName = $("#sName").value.trim(); s.tagline = $("#sTagline").value.trim();
+    s.heroTitle = $("#sHeroTitle").value.trim();
     s.heroSub = $("#sHeroSub").value.trim(); s.announcement = $("#sAnn").value;
     s.closedMessage = $("#sClosed").value; s.contactLine = $("#sContact").value.trim();
+    s.footerNote = $("#sFootNote").value.trim();
     s.ordersEndpoint = $("#sEndpoint").value.trim();
     s.adminPassword = $("#sPw").value || s.adminPassword;
     s.shippingOptions = $("#sShip").value.split(/[、,，]/).map(function(x){ return x.trim(); })
