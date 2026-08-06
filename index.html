@@ -358,22 +358,17 @@
     "announcement": "1. 本團收單至 08/06 23:59，預計 09/30 前寄出。\n2. 此站屬於小量代購，填寫訂單後不代表交易成功，將由本人和您聯絡後，並支付20%訂金，訂單方才成立。\n3. 運費另計（蝦皮店到店 $45 / 7-11、全家店到店 $60）。",
     "closedMessage": "目前暫停收單 🙏\n下一團開團時間會在Threads公告，敬請追蹤 @waywalker_0623",
     "currency": "NT$",
+    "stockCsvUrl": "",
     "adminPassword": "PCH0623",
     "ordersEndpoint": "https://docs.google.com/forms/d/e/1FAIpQLSe6sbRFLD_ALeYIxsT8_lS9vVdJ5VgbOG9ytFB9vx-Z_VW_Vw/viewform?usp=pp_url&entry.1692890237=NAME&entry.1013077395=CONTACT&entry.275195721=SHIP&entry.1102910773=NOTE&entry.931090019=ITEMS&entry.2065715724=TOTAL&entry.1729979190=TIME",
     "contactLine": "Threads：@waywalker_0623",
-    "askFields": {
-      "name": "訂購人姓名",
-      "contact": "聯絡方式（LINE ID / IG 帳號）",
-      "shipping": "寄送方式",
-      "note": "備註"
-    },
     "shippingOptions": [
       "蝦皮店到店",
       "7-11 店到店",
       "全家店到店"
     ],
     "footerNote": "本站為個人代購服務，非 Pokémon 官方網站。商品圖片與名稱版權屬原公司所有。",
-    "updatedAt": 1786013806686
+    "updatedAt": 1786028116821
   },
   "products": [
     {
@@ -532,6 +527,7 @@
       <option value="stock-desc">剩餘數量多</option>
     </select>
     <span class="count-note" id="countNote"></span>
+    <span class="count-note" id="stockNote"></span>
   </div>
 
   <div class="grid" id="grid"></div>
@@ -612,6 +608,12 @@
           <p class="hintline">支援 Google 表單預填連結（推薦）或 Apps Script 網址。留空則客人下單後顯示訂單明細，讓他複製私訊給你。</p>
         </div>
         <div class="panel">
+          <h3>即時庫存來源（選用）</h3>
+          <input class="f-in" id="sStockCsv" placeholder="貼上試算表「發布到網路」的 CSV 網址">
+          <div id="stockStatus" class="hintline"></div>
+          <p class="hintline">設定後前台會自動讀取已訂數量，你就不用手動改「已訂」。設定方式見說明文件。</p>
+        </div>
+        <div class="panel">
           <h3>管理密碼</h3>
           <input class="f-in" id="sPw" placeholder="管理密碼">
           <p class="hintline">僅為前端簡易保護，請勿存放敏感資料。</p>
@@ -647,6 +649,7 @@
           <label class="mini" style="cursor:pointer">上傳圖片到某商品
             <input type="file" id="imgUp" accept="image/*" class="hide">
           </label>
+          <button class="mini" id="copyCodes">複製商品代碼清單</button>
         </div>
         <p class="hintline">「剩餘 = 總數量 − 已訂」。每收到訂單後手動更新「已訂」，前台就會即時反映剩餘數量。</p>
       </div>
@@ -799,6 +802,39 @@
     imgFallback(g, "ph", "圖片無法載入");
   }
 
+  /* ---------------- 即時庫存（讀取 Google 試算表發布的 CSV） ---------------- */
+  function applyStockCsv(text){
+    var rows = String(text||"").replace(/^﻿/, "").split(/\r?\n/), hit = 0;
+    rows.forEach(function(line){
+      if(!line || line.indexOf(",") < 0) return;
+      var cols = line.split(",").map(function(c){ return c.replace(/^"|"$/g, "").trim(); });
+      var p = byId(cols[0]); if(!p) return;
+      for(var i = 1; i < cols.length; i++){
+        if(cols[i] !== "" && isFinite(Number(cols[i]))){
+          p.ordered = Math.max(0, Math.floor(Number(cols[i]))); hit++; return;
+        }
+      }
+    });
+    return hit;
+  }
+  function stockNote(msg){
+    var el = $("#stockNote"); if(el) el.textContent = msg || "";
+  }
+  function refreshStock(){
+    var url = (data.settings.stockCsvUrl||"").trim();
+    if(!url) return;
+    stockNote("庫存更新中…");
+    fetch(url + (url.indexOf("?")>=0 ? "&" : "?") + "_=" + Date.now(), {cache:"no-store"})
+      .then(function(r){ if(!r.ok) throw new Error("HTTP "+r.status); return r.text(); })
+      .then(function(t){
+        var n = applyStockCsv(t);
+        if(!n) throw new Error("沒有對應到商品");
+        renderGrid(); renderCart();
+        stockNote("庫存更新於 " + new Date().toLocaleTimeString("zh-Hant-TW", {hour12:false}).slice(0,5));
+      })
+      .catch(function(){ stockNote("庫存為公告值"); });
+  }
+
   /* 圖片載不出來時（例如圖床擋外連）改顯示提示，不要出現破圖 */
   function imgFallback(root, phClass, text){
     $$("img", root).forEach(function(im){
@@ -877,7 +913,7 @@
   /* 解析 Google 表單「預先填入的連結」，取得送出網址與各欄位代號。
      使用者在預填連結裡把各題填成代號：NAME / CONTACT / SHIP / NOTE / ITEMS / TOTAL / TIME
      若沒有使用代號，就把整份訂單明細塞進第一個欄位。 */
-  var GF_KEYS = ["NAME","CONTACT","EMAIL","SHIP","NOTE","ITEMS","TOTAL","TIME"];
+  var GF_KEYS = ["NAME","CONTACT","EMAIL","SHIP","NOTE","ITEMS","TOTAL","TIME","CODES"];
   function googleFormConfig(url){
     var raw = String(url||"").trim();
     if(raw.indexOf("docs.google.com/forms/") < 0) return null;
@@ -905,7 +941,7 @@
     var val = {
       NAME: payload.name, CONTACT: payload.contact, EMAIL: payload.email,
       SHIP: payload.shipping, NOTE: payload.note, ITEMS: itemsText(payload),
-      TOTAL: String(payload.total), TIME: payload.time
+      TOTAL: String(payload.total), TIME: payload.time, CODES: payload.codes
     };
     GF_KEYS.forEach(function(k){ if(gf.map[k]) body.append(gf.map[k], val[k] || ""); });
     return body;
@@ -942,6 +978,8 @@
         return {id:l.p.id, name:l.p.name, price:Number(l.p.price), qty:l.q, subtotal:l.sum};
       })
     };
+    /* 給試算表用的機器可讀代碼，例如 p1:2|p3:1 */
+    payload.codes = lines.map(function(l){ return l.p.id + ":" + l.q; }).join("|");
     payload.summary = orderText(payload);
     var res = $("#coResult"), btn = $("#submitBtn"), url = (data.settings.ordersEndpoint||"").trim();
 
@@ -994,11 +1032,22 @@
     $("#sFootNote").value = s.footerNote||"";
     $("#sShip").value = (s.shippingOptions||[]).join("、");
     $("#sEndpoint").value = s.ordersEndpoint||""; $("#sPw").value = s.adminPassword||"";
+    $("#sStockCsv").value = s.stockCsvUrl||"";
     $("#swOpen").className = "sw" + (s.open ? " on" : "");
     $("#swLabel").textContent = s.open ? "開放收單中" : "已暫停收單";
     showEndpointStatus();
+    showStockStatus();
     showSourceInfo();
     renderAdminTable();
+  }
+  /* 檢查即時庫存來源 */
+  function showStockStatus(){
+    var box = $("#stockStatus"), url = $("#sStockCsv").value.trim();
+    if(!url){ box.innerHTML = "<b>目前：手動維護「已訂」欄位</b>"; return; }
+    var ok = /docs\.google\.com\/spreadsheets\/.*output=csv/i.test(url);
+    box.innerHTML = ok
+      ? "<b style='color:var(--ok)'>✓ 網址格式正確</b>　儲存後重新整理前台即可驗證"
+      : "<b style='color:var(--red)'>⚠️ 網址看起來不對</b>　應為試算表「發布到網路」產生、結尾含 <code>output=csv</code> 的網址";
   }
   /* 告訴管理者現在畫面上的資料是從哪來的 */
   function showSourceInfo(){
@@ -1076,6 +1125,7 @@
     s.closedMessage = $("#sClosed").value; s.contactLine = $("#sContact").value.trim();
     s.footerNote = $("#sFootNote").value.trim();
     s.ordersEndpoint = $("#sEndpoint").value.trim();
+    s.stockCsvUrl = $("#sStockCsv").value.trim();
     s.adminPassword = $("#sPw").value || s.adminPassword;
     s.shippingOptions = $("#sShip").value.split(/[、,，]/).map(function(x){ return x.trim(); })
       .filter(function(x){ return x; });
@@ -1173,6 +1223,17 @@
   };
   $("#pw").addEventListener("keydown", function(e){ if(e.key==="Enter") $("#loginBtn").click(); });
   $("#sEndpoint").addEventListener("input", showEndpointStatus);
+  $("#sStockCsv").addEventListener("input", showStockStatus);
+  $("#copyCodes").onclick = function(){
+    var txt = data.products.map(function(p){ return p.id + "\t" + p.name; }).join("\n");
+    var ta = document.createElement("textarea");
+    ta.value = txt; document.body.appendChild(ta); ta.select();
+    try{
+      document.execCommand("copy");
+      admMsg("已複製 " + data.products.length + " 項商品代碼。到試算表的「庫存統計」工作表 A2 貼上即可（會自動分成代碼、名稱兩欄）。");
+    }catch(err){ admMsg("複製失敗，請手動記錄商品代碼。", false); }
+    document.body.removeChild(ta);
+  };
 
   $("#swOpen").onclick = function(){
     data.settings.open = !data.settings.open;
@@ -1268,6 +1329,10 @@
 
   /* ---------------- 啟動 ---------------- */
   renderChrome(); renderGrid(); renderCart();
+  refreshStock();
+  document.addEventListener("visibilitychange", function(){
+    if(!document.hidden) refreshStock();   // 切回分頁時重新抓一次庫存
+  });
   if(location.hash === "#admin") showAdmin();
 })();
 </script>
