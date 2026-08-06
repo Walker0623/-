@@ -566,6 +566,10 @@
       <input class="f-in" id="fName" name="name" required maxlength="40">
       <label class="f" for="fContact">聯絡方式：LINE 或 Threads（請註明）<span>*</span></label>
       <input class="f-in" id="fContact" name="contact" required maxlength="60">
+      <label class="f" for="fEmail">Email（選填，建議填寫）</label>
+      <input class="f-in" id="fEmail" name="email" type="email" maxlength="80"
+        placeholder="example@gmail.com" autocomplete="email">
+      <p class="hintline" style="margin:4px 0 0">用於匯款提醒與出貨通知，僅供本次代購聯絡使用。</p>
       <label class="f" for="fShip">寄送方式</label>
       <select class="f-in" id="fShip" name="shipping"></select>
       <label class="f" for="fNote">備註（其他需求）</label>
@@ -873,7 +877,7 @@
   /* 解析 Google 表單「預先填入的連結」，取得送出網址與各欄位代號。
      使用者在預填連結裡把各題填成代號：NAME / CONTACT / SHIP / NOTE / ITEMS / TOTAL / TIME
      若沒有使用代號，就把整份訂單明細塞進第一個欄位。 */
-  var GF_KEYS = ["NAME","CONTACT","SHIP","NOTE","ITEMS","TOTAL","TIME"];
+  var GF_KEYS = ["NAME","CONTACT","EMAIL","SHIP","NOTE","ITEMS","TOTAL","TIME"];
   function googleFormConfig(url){
     var raw = String(url||"").trim();
     if(raw.indexOf("docs.google.com/forms/") < 0) return null;
@@ -899,8 +903,8 @@
     var body = new URLSearchParams();
     if(!gf.keyed){ body.append(gf.first, payload.summary); return body; }
     var val = {
-      NAME: payload.name, CONTACT: payload.contact, SHIP: payload.shipping,
-      NOTE: payload.note, ITEMS: itemsText(payload),
+      NAME: payload.name, CONTACT: payload.contact, EMAIL: payload.email,
+      SHIP: payload.shipping, NOTE: payload.note, ITEMS: itemsText(payload),
       TOTAL: String(payload.total), TIME: payload.time
     };
     GF_KEYS.forEach(function(k){ if(gf.map[k]) body.append(gf.map[k], val[k] || ""); });
@@ -909,7 +913,9 @@
 
   function orderText(payload){
     var t = "【" + (data.settings.shopName||"代購") + " 訂單】\n";
-    t += "姓名：" + payload.name + "\n聯絡方式：" + payload.contact + "\n寄送：" + payload.shipping + "\n";
+    t += "姓名：" + payload.name + "\n聯絡方式：" + payload.contact + "\n";
+    if(payload.email) t += "Email：" + payload.email + "\n";
+    t += "寄送：" + payload.shipping + "\n";
     if(payload.note) t += "備註：" + payload.note + "\n";
     t += "----------------\n";
     payload.items.forEach(function(i){
@@ -928,6 +934,7 @@
       time: new Date().toLocaleString("zh-Hant-TW", {hour12:false}),
       name: $("#fName").value.trim(),
       contact: $("#fContact").value.trim(),
+      email: $("#fEmail").value.trim(),
       shipping: $("#fShip").value,
       note: $("#fNote").value.trim(),
       total: cartTotal(),
