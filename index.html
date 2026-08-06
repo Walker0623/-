@@ -358,14 +358,15 @@
     "announcement": "本團收單至 8/10 23:59，預計 8/25 前寄出。\n價格為台幣，未含國內運費（郵局便利袋 $70 / 7-11 店到店 $80）。",
     "closedMessage": "目前暫停收單 🙏\n下一團開團時間會在Threads公告，敬請追蹤 @waywalker_0623",
     "currency": "NT$",
+    "updatedAt": 1786001652142,
     "adminPassword": "PCH0623",
     "ordersEndpoint": "https://docs.google.com/forms/d/e/1FAIpQLSe6sbRFLD_ALeYIxsT8_lS9vVdJ5VgbOG9ytFB9vx-Z_VW_Vw/viewform?usp=pp_url&entry.1692890237=NAME&entry.1013077395=CONTACT&entry.275195721=SHIP&entry.1102910773=NOTE&entry.931090019=ITEMS&entry.2065715724=TOTAL&entry.1729979190=TIME",
     "contactLine": "Threads：@waywalker_0623",
     "askFields": {
       "name": "訂購人姓名",
-      "contact": "聯絡方式（LINE ID / IG 帳號）",
+      "contact": "聯絡方式：LINE 或 Threads（請註明）",
       "shipping": "寄送方式",
-      "note": "備註"
+      "note": "備註（其他需求）"
     },
     "shippingOptions": [
       "蝦皮店到店",
@@ -564,11 +565,11 @@
     <form id="coForm" autocomplete="on">
       <label class="f" for="fName">訂購人姓名 <span>*</span></label>
       <input class="f-in" id="fName" name="name" required maxlength="40">
-      <label class="f" for="fContact">聯絡方式（LINE ID / IG 帳號）<span>*</span></label>
+      <label class="f" for="fContact">聯絡方式：LINE 或 Threads（請註明）<span>*</span></label>
       <input class="f-in" id="fContact" name="contact" required maxlength="60">
       <label class="f" for="fShip">寄送方式</label>
       <select class="f-in" id="fShip" name="shipping"></select>
-      <label class="f" for="fNote">備註（尺寸、顏色、其他需求）</label>
+      <label class="f" for="fNote">備註（其他需求）</label>
       <textarea class="f-in" id="fNote" name="note" maxlength="500"></textarea>
       <div style="height:14px"></div>
       <button class="primary" type="submit" id="submitBtn">送出訂單</button>
@@ -649,6 +650,7 @@
 
       <div class="panel" style="margin-top:14px">
         <h3>儲存與發佈</h3>
+        <div id="srcInfo" class="hintline" style="margin:0 0 10px"></div>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
           <button class="primary" id="saveLocal" style="width:auto;padding:10px 16px">儲存變更（本機預覽）</button>
           <button class="ghost" id="dlHtml">⬇ 下載更新後的網站檔</button>
@@ -676,11 +678,17 @@
   function lsDel(k){ var s=store(); if(!s) return; try{ s.removeItem(k); }catch(e){} }
 
   var BASE = JSON.parse(document.getElementById("site-data").textContent);
+  var dataSource = "file";   // file = 用網站檔內建資料；local = 用本機暫存的變更
   var data = (function(){
     var raw = lsGet(LS_DATA);
     if(raw){ try{
       var d = JSON.parse(raw);
-      if(d && d.settings && Array.isArray(d.products)) return d;
+      if(d && d.settings && Array.isArray(d.products)){
+        /* 網站檔比本機暫存新時，一律以網站檔為準，避免看到舊資料 */
+        var lu = Number(d.settings.updatedAt || 0), bu = Number(BASE.settings.updatedAt || 0);
+        if(bu > lu){ lsDel(LS_DATA); }
+        else { dataSource = "local"; return d; }
+      }
     }catch(e){} }
     return JSON.parse(JSON.stringify(BASE));
   })();
@@ -983,7 +991,20 @@
     $("#swOpen").className = "sw" + (s.open ? " on" : "");
     $("#swLabel").textContent = s.open ? "開放收單中" : "已暫停收單";
     showEndpointStatus();
+    showSourceInfo();
     renderAdminTable();
+  }
+  /* 告訴管理者現在畫面上的資料是從哪來的 */
+  function showSourceInfo(){
+    var box = $("#srcInfo"); if(!box) return;
+    var t = Number(data.settings.updatedAt || 0);
+    var when = t ? new Date(t).toLocaleString("zh-Hant-TW", {hour12:false}) : "未記錄時間";
+    if(dataSource === "local"){
+      box.innerHTML = "目前顯示：<b>本機暫存的變更</b>（最後編輯 " + esc(when) + "）。"
+        + "尚未下載成網站檔的話，客人看到的仍是舊版。";
+    } else {
+      box.innerHTML = "目前顯示：<b>網站檔內建資料</b>（版本 " + esc(when) + "），與客人看到的一致。";
+    }
   }
   /* 即時檢查訂單接收網址是否可用 */
   function showEndpointStatus(){
@@ -1042,6 +1063,7 @@
   }
   function collectAdmin(){
     var s = data.settings;
+    s.updatedAt = Date.now();
     s.shopName = $("#sName").value.trim(); s.tagline = $("#sTagline").value.trim();
     s.heroTitle = $("#sHeroTitle").value.trim();
     s.heroSub = $("#sHeroSub").value.trim(); s.announcement = $("#sAnn").value;
@@ -1194,7 +1216,8 @@
   });
 
   $("#saveLocal").onclick = function(){
-    collectAdmin(); saveData(); renderChrome(); renderGrid(); renderCart();
+    collectAdmin(); saveData(); dataSource = "local";
+    renderChrome(); renderGrid(); renderCart(); showSourceInfo();
     admMsg("已儲存到這台電腦的瀏覽器。要讓客人看到請按「下載更新後的網站檔」並上傳。");
   };
   $("#dlJson").onclick = function(){
@@ -1209,7 +1232,8 @@
       try{
         var d = JSON.parse(fr.result);
         if(!d.settings || !Array.isArray(d.products)) throw new Error("格式不符");
-        data = d; saveData(); fillAdmin(); renderChrome(); renderGrid(); renderCart();
+        data = d; saveData(); dataSource = "local";
+        fillAdmin(); renderChrome(); renderGrid(); renderCart();
         admMsg("匯入成功。");
       }catch(err){ admMsg("匯入失敗："+esc(err.message), false); }
     };
@@ -1218,7 +1242,7 @@
   $("#resetLocal").onclick = function(){
     if(!confirm("清除本機變更，回到網站檔內建的資料？")) return;
     lsDel(LS_DATA);
-    data = JSON.parse(JSON.stringify(BASE));
+    data = JSON.parse(JSON.stringify(BASE)); dataSource = "file";
     fillAdmin(); renderChrome(); renderGrid(); renderCart();
     admMsg("已回復為網站檔內建資料。");
   };
