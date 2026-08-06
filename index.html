@@ -602,9 +602,10 @@
           <p class="hintline">關閉後前台只顯示商品，不能加入購物車。</p>
         </div>
         <div class="panel">
-          <h3>訂單接收網址（Google Sheet）</h3>
-          <input class="f-in" id="sEndpoint" placeholder="https://script.google.com/macros/s/.../exec">
-          <p class="hintline">留空則客人下單後改為顯示訂單明細，讓客人複製私訊給你。</p>
+          <h3>訂單接收網址</h3>
+          <input class="f-in" id="sEndpoint" placeholder="貼上 Google 表單的「預先填入的連結」">
+          <div id="epStatus" class="hintline"></div>
+          <p class="hintline">支援 Google 表單預填連結（推薦）或 Apps Script 網址。留空則客人下單後顯示訂單明細，讓他複製私訊給你。</p>
         </div>
         <div class="panel">
           <h3>管理密碼</h3>
@@ -862,6 +863,43 @@
   }
 
   /* ---------------- 送單 ---------------- */
+  /* 解析 Google 表單「預先填入的連結」，取得送出網址與各欄位代號。
+     使用者在預填連結裡把各題填成代號：NAME / CONTACT / SHIP / NOTE / ITEMS / TOTAL / TIME
+     若沒有使用代號，就把整份訂單明細塞進第一個欄位。 */
+  var GF_KEYS = ["NAME","CONTACT","SHIP","NOTE","ITEMS","TOTAL","TIME"];
+  function googleFormConfig(url){
+    var raw = String(url||"").trim();
+    if(raw.indexOf("docs.google.com/forms/") < 0) return null;
+    var u;
+    try{ u = new URL(raw); }catch(err){ return null; }
+    var action = u.origin + u.pathname.replace(/\/(viewform|formResponse|edit)\/?$/, "") + "/formResponse";
+    var map = {}, keyed = 0, first = null;
+    u.searchParams.forEach(function(v, k){
+      if(k.indexOf("entry.") !== 0) return;
+      var tag = String(v||"").trim().toUpperCase();
+      if(GF_KEYS.indexOf(tag) >= 0 && !map[tag]){ map[tag] = k; keyed++; }
+      else if(!first){ first = k; }
+    });
+    if(!keyed && !first) return null;
+    return {action:action, map:map, keyed:keyed>0, first:first};
+  }
+  function itemsText(payload){
+    return payload.items.map(function(i){
+      return i.name + " × " + i.qty + " = " + money(i.subtotal);
+    }).join("\n");
+  }
+  function googleFormBody(gf, payload){
+    var body = new URLSearchParams();
+    if(!gf.keyed){ body.append(gf.first, payload.summary); return body; }
+    var val = {
+      NAME: payload.name, CONTACT: payload.contact, SHIP: payload.shipping,
+      NOTE: payload.note, ITEMS: itemsText(payload),
+      TOTAL: String(payload.total), TIME: payload.time
+    };
+    GF_KEYS.forEach(function(k){ if(gf.map[k]) body.append(gf.map[k], val[k] || ""); });
+    return body;
+  }
+
   function orderText(payload){
     var t = "【" + (data.settings.shopName||"代購") + " 訂單】\n";
     t += "姓名：" + payload.name + "\n聯絡方式：" + payload.contact + "\n寄送：" + payload.shipping + "\n";
@@ -914,9 +952,10 @@
         + esc(data.settings.contactLine||"") + "</div>");
       return;
     }
-    var body = new URLSearchParams();
-    body.append("payload", JSON.stringify(payload));
-    fetch(url, {method:"POST", mode:"no-cors", body:body})
+    var gf = googleFormConfig(url), target = url, body;
+    if(gf){ target = gf.action; body = googleFormBody(gf, payload); }
+    else { body = new URLSearchParams(); body.append("payload", JSON.stringify(payload)); }
+    fetch(target, {method:"POST", mode:"no-cors", body:body})
       .then(function(){
         done('<div class="ok-msg">✓ 訂單已送出，我會盡快用你留的聯絡方式回覆付款資訊。</div>');
       })
@@ -943,7 +982,28 @@
     $("#sEndpoint").value = s.ordersEndpoint||""; $("#sPw").value = s.adminPassword||"";
     $("#swOpen").className = "sw" + (s.open ? " on" : "");
     $("#swLabel").textContent = s.open ? "開放收單中" : "已暫停收單";
+    showEndpointStatus();
     renderAdminTable();
+  }
+  /* 即時檢查訂單接收網址是否可用 */
+  function showEndpointStatus(){
+    var box = $("#epStatus"), url = $("#sEndpoint").value.trim();
+    if(!url){ box.innerHTML = "<b>目前：客人自行複製明細私訊給你</b>"; return; }
+    var gf = googleFormConfig(url);
+    if(gf){
+      if(gf.keyed){
+        var got = GF_KEYS.filter(function(k){ return gf.map[k]; });
+        box.innerHTML = "<b style='color:var(--ok)'>✓ Google 表單已連結</b>　對應欄位：" + got.join("、");
+      } else {
+        box.innerHTML = "<b style='color:var(--ok)'>✓ Google 表單已連結</b>（單一欄位模式，整份訂單會寫進同一格）";
+      }
+      return;
+    }
+    if(url.indexOf("script.google.com") >= 0){
+      box.innerHTML = "<b style='color:var(--ok)'>✓ Apps Script 網址</b>"; return;
+    }
+    box.innerHTML = "<b style='color:var(--red)'>⚠️ 無法辨識這個網址</b>　"
+      + "請貼 Google 表單的「預先填入的連結」（網址會包含 <code>docs.google.com/forms/</code> 與 <code>entry.</code>）";
   }
   function renderAdminTable(){
     var tb = $("#admTable tbody");
@@ -1084,6 +1144,7 @@
     } else { $("#pwErr").textContent = "密碼不正確。"; }
   };
   $("#pw").addEventListener("keydown", function(e){ if(e.key==="Enter") $("#loginBtn").click(); });
+  $("#sEndpoint").addEventListener("input", showEndpointStatus);
 
   $("#swOpen").onclick = function(){
     data.settings.open = !data.settings.open;
