@@ -807,18 +807,26 @@
 
   /* ---------------- 即時庫存（讀取 Google 試算表發布的 CSV） ---------------- */
   function applyStockCsv(text){
-    var rows = String(text||"").replace(/^﻿/, "").split(/\r?\n/), hit = 0;
-    rows.forEach(function(line){
+    var raw = String(text||"").replace(/^﻿/, "").trim();
+    /* 抓到的是錯誤頁而不是資料時，直接視為失敗，不要動庫存 */
+    if(raw.indexOf("<") === 0 || /<html/i.test(raw)) throw new Error("回應不是資料");
+    var map = {};
+    raw.split(/\r?\n/).forEach(function(line){
       if(!line || line.indexOf(",") < 0) return;
       var cols = line.split(",").map(function(c){ return c.replace(/^"|"$/g, "").trim(); });
-      var p = byId(cols[0]); if(!p) return;
+      if(!cols[0]) return;
       for(var i = 1; i < cols.length; i++){
         if(cols[i] !== "" && isFinite(Number(cols[i]))){
-          p.ordered = Math.max(0, Math.floor(Number(cols[i]))); hit++; return;
+          map[cols[0]] = Math.max(0, Math.floor(Number(cols[i]))); return;
         }
       }
     });
-    return hit;
+    /* 以試算表為準：沒出現在清單裡的商品代表目前 0 筆訂購，要歸零，
+       否則刪掉訂單後庫存不會恢復 */
+    data.products.forEach(function(p){
+      p.ordered = map.hasOwnProperty(p.id) ? map[p.id] : 0;
+    });
+    return true;
   }
   function stockNote(msg){
     var el = $("#stockNote"); if(el) el.textContent = msg || "";
@@ -830,8 +838,7 @@
     fetch(url + (url.indexOf("?")>=0 ? "&" : "?") + "_=" + Date.now(), {cache:"no-store"})
       .then(function(r){ if(!r.ok) throw new Error("HTTP "+r.status); return r.text(); })
       .then(function(t){
-        var n = applyStockCsv(t);
-        if(!n) throw new Error("沒有對應到商品");
+        applyStockCsv(t);
         renderGrid(); renderCart();
         stockNote("庫存更新於 " + new Date().toLocaleTimeString("zh-Hant-TW", {hour12:false}).slice(0,5));
       })
