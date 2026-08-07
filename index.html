@@ -1044,10 +1044,14 @@
   function showStockStatus(){
     var box = $("#stockStatus"), url = $("#sStockCsv").value.trim();
     if(!url){ box.innerHTML = "<b>目前：手動維護「已訂」欄位</b>"; return; }
+    if(/script\.google\.com\/macros\/.*\/exec/i.test(url)){
+      box.innerHTML = "<b style='color:var(--ok)'>✓ Apps Script 即時庫存</b>　沒有快取延遲";
+      return;
+    }
     var ok = /docs\.google\.com\/spreadsheets\/.*output=csv/i.test(url);
     box.innerHTML = ok
-      ? "<b style='color:var(--ok)'>✓ 網址格式正確</b>　儲存後重新整理前台即可驗證"
-      : "<b style='color:var(--red)'>⚠️ 網址看起來不對</b>　應為試算表「發布到網路」產生、結尾含 <code>output=csv</code> 的網址";
+      ? "<b style='color:var(--ok)'>✓ 試算表 CSV</b>　更新有 1～5 分鐘延遲"
+      : "<b style='color:var(--red)'>⚠️ 網址看起來不對</b>　應為 Apps Script 的 <code>/exec</code> 網址，或試算表「發布到網路」結尾含 <code>output=csv</code> 的網址";
   }
   /* 告訴管理者現在畫面上的資料是從哪來的 */
   function showSourceInfo(){
