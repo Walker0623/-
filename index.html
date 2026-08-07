@@ -359,6 +359,7 @@
     "closedMessage": "目前暫停收單 🙏\n下一團開團時間會在Threads公告，敬請追蹤 @waywalker_0623",
     "currency": "NT$",
     "stockCsvUrl": "https://script.google.com/macros/s/AKfycbxzFHjUWIf_jZVAKGHPeFD8Hkhg2M-f45plQGIwcST-zHh3L16qpzxu1Cv7QguF12U_og/exec",
+    "thankYouNote": "感謝您的訂購！訂單確認信已寄至您填寫的信箱。\n\n1. 訂單確認：我們將於 24 小時內透過您留下的聯絡方式與您聯繫，確認商品內容與寄送細節。\n2. 支付訂金：訂單成立需支付商品金額 20% 作為訂金，收到後即為您保留商品。\n3. 商品抵台：屆時通知您支付尾款與運費，隨後安排出貨。\n\n※ 送出訂單不代表交易完成，須經確認並支付訂金後訂單方為成立。\n※ 請留意 Threads 私訊 @waywalker_0623，以免漏接訊息。",
     "adminPassword": "PCH0623",
     "ordersEndpoint": "https://script.google.com/macros/s/AKfycbxzFHjUWIf_jZVAKGHPeFD8Hkhg2M-f45plQGIwcST-zHh3L16qpzxu1Cv7QguF12U_og/exec",
     "contactLine": "Threads：@waywalker_0623",
@@ -368,7 +369,7 @@
       "全家店到店"
     ],
     "footerNote": "本站為個人代購服務，非 Pokémon 官方網站。商品圖片與名稱版權屬原公司所有。",
-    "updatedAt": 1786070774924
+    "updatedAt": 1786070999447
   },
   "products": [
     {
@@ -562,10 +563,10 @@
       <input class="f-in" id="fName" name="name" required maxlength="40">
       <label class="f" for="fContact">聯絡方式：LINE 或 Threads（請註明）<span>*</span></label>
       <input class="f-in" id="fContact" name="contact" required maxlength="60">
-      <label class="f" for="fEmail">Email（選填，建議填寫）</label>
-      <input class="f-in" id="fEmail" name="email" type="email" maxlength="80"
+      <label class="f" for="fEmail">Email <span>*</span></label>
+      <input class="f-in" id="fEmail" name="email" type="email" maxlength="80" required
         placeholder="example@gmail.com" autocomplete="email">
-      <p class="hintline" style="margin:4px 0 0">用於匯款提醒與出貨通知，僅供本次代購聯絡使用。</p>
+      <p class="hintline" style="margin:4px 0 0">送出後會寄一封訂單確認信到這個信箱，並用於後續匯款與出貨通知。</p>
       <label class="f" for="fShip">寄送方式</label>
       <select class="f-in" id="fShip" name="shipping"></select>
       <label class="f" for="fNote">備註（其他需求）</label>
@@ -628,6 +629,8 @@
         <label class="f">首頁副標</label><input class="f-in" id="sHeroSub">
         <label class="f">公告（開團中顯示，可換行）</label><textarea class="f-in" id="sAnn"></textarea>
         <label class="f">暫停收單時顯示的訊息</label><textarea class="f-in" id="sClosed"></textarea>
+        <label class="f">送出訂單後顯示的說明（後續流程、注意事項）</label>
+        <textarea class="f-in" id="sThanks" style="min-height:120px"></textarea>
         <label class="f">頁尾聯絡資訊</label><input class="f-in" id="sContact">
         <label class="f">頁尾聲明（免責說明，留空則不顯示）</label><textarea class="f-in" id="sFootNote"></textarea>
         <label class="f">寄送方式選項（用逗號分隔）</label><input class="f-in" id="sShip">
@@ -944,6 +947,8 @@
       TOTAL: String(payload.total), TIME: payload.time, CODES: payload.codes
     };
     GF_KEYS.forEach(function(k){ if(gf.map[k]) body.append(gf.map[k], val[k] || ""); });
+    /* 表單若開啟「收集電子郵件地址 → 回應者輸入」，這個參數才能讓 Google 寄出回覆副本 */
+    if(payload.email) body.append("emailAddress", payload.email);
     return body;
   }
 
@@ -1009,7 +1014,10 @@
     else { body = new URLSearchParams(); body.append("payload", JSON.stringify(payload)); }
     fetch(target, {method:"POST", mode:"no-cors", body:body})
       .then(function(){
-        done('<div class="ok-msg">✓ 訂單已送出，我會盡快用你留的聯絡方式回覆付款資訊。</div>');
+        var note = (data.settings.thankYouNote||"").trim();
+        done('<div class="ok-msg"><b>✓ 訂單已送出</b>'
+          + (note ? '<div style="white-space:pre-wrap;margin-top:8px">' + esc(note) + "</div>" : "")
+          + "</div>");
       })
       .catch(function(){
         done('<div class="err-msg">自動送出失敗，請複製下方訂單明細私訊給我。</div>');
@@ -1029,7 +1037,7 @@
     $("#sHeroTitle").value = s.heroTitle||"";
     $("#sHeroSub").value = s.heroSub||""; $("#sAnn").value = s.announcement||"";
     $("#sClosed").value = s.closedMessage||""; $("#sContact").value = s.contactLine||"";
-    $("#sFootNote").value = s.footerNote||"";
+    $("#sFootNote").value = s.footerNote||""; $("#sThanks").value = s.thankYouNote||"";
     $("#sShip").value = (s.shippingOptions||[]).join("、");
     $("#sEndpoint").value = s.ordersEndpoint||""; $("#sPw").value = s.adminPassword||"";
     $("#sStockCsv").value = s.stockCsvUrl||"";
@@ -1128,6 +1136,7 @@
     s.heroSub = $("#sHeroSub").value.trim(); s.announcement = $("#sAnn").value;
     s.closedMessage = $("#sClosed").value; s.contactLine = $("#sContact").value.trim();
     s.footerNote = $("#sFootNote").value.trim();
+    s.thankYouNote = $("#sThanks").value;
     s.ordersEndpoint = $("#sEndpoint").value.trim();
     s.stockCsvUrl = $("#sStockCsv").value.trim();
     s.adminPassword = $("#sPw").value || s.adminPassword;
